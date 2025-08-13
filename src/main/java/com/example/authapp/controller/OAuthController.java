@@ -21,12 +21,13 @@ public class OAuthController {
     @GetMapping("/url/{provider}")
     public ResponseEntity<ApiResponse<Map<String, String>>> getOAuthUrl(@PathVariable String provider) {
         try {
-            String baseUrl = "http://localhost:8080";
+            String baseUrl = "http://localhost:8081";  // 올바른 포트로 수정
             String loginUrl = baseUrl + "/oauth2/authorization/" + provider.toLowerCase();
             
             Map<String, String> response = new HashMap<>();
             response.put("provider", provider.toLowerCase());
             response.put("loginUrl", loginUrl);
+            response.put("url", loginUrl);  // 프론트엔드에서 기대하는 필드 추가
             
             log.info("OAuth URL requested for provider: {}", provider);
             

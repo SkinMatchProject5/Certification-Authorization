@@ -22,7 +22,7 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
         log.error("OAuth2 authentication failed: {}", exception.getMessage());
         
         // 프론트엔드 에러 페이지로 리다이렉트
-        String targetUrl = UriComponentsBuilder.fromUriString("http://localhost:8081/login")
+        String targetUrl = UriComponentsBuilder.fromUriString("http://localhost:5173/login")
                 .queryParam("error", "oauth_failed")
                 .queryParam("message", exception.getMessage())
                 .build().toUriString();

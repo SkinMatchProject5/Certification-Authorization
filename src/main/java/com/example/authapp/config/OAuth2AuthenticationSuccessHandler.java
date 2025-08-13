@@ -58,8 +58,8 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     }
 
     private String createTargetUrl(LoginResponse loginResponse) {
-        // 프론트엔드 URL (환경에 따라 변경)
-        String frontendUrl = "http://localhost:8081";
+        // 프론트엔드 URL (개발환경)
+        String frontendUrl = "http://localhost:5173";
         
         return UriComponentsBuilder.fromUriString(frontendUrl + "/auth/callback")
                 .queryParam("accessToken", URLEncoder.encode(loginResponse.getAccessToken(), StandardCharsets.UTF_8))

@@ -4,7 +4,7 @@
 
 **목표**: Spring Boot + React 기반 OAuth 2.0 인증 시스템 구현  
 **완료 날짜**: 2025-08-11  
-**기술 스택**: Spring Boot 3.5.4, Java 21, React + TypeScript, Gradle, H2 Database (MySQL 예정)  
+**기술 스택**: Spring Boot 3.5.4, Java 21, React + TypeScript, Gradle, MySQL 8.0+  
 **OAuth 제공자**: Google ✅, Naver ✅, Kakao ⚠️ (이메일 동의항목 이슈)
 
 ---
@@ -16,7 +16,7 @@
 - [x] JWT 토큰 기반 인증/인가 시스템
 - [x] 확장된 사용자 프로필 관리 시스템
 - [x] RESTful API 설계 및 구현
-- [x] H2 Database 연동 (MySQL 마이그레이션 준비 완료)
+- [x] MySQL Database 연동
 - [x] Spring Security 완전 설정
 - [x] CORS 정책 완벽 구성
 - [x] 글로벌 예외 처리 및 정적 리소스 처리
@@ -100,7 +100,7 @@ skin-story-solver-main/
 
 ### **확장된 데이터베이스 스키마**
 ```sql
--- H2 Database (MySQL 마이그레이션 준비 완료)
+-- MySQL Database
 CREATE TABLE users (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -115,8 +115,8 @@ CREATE TABLE users (
     provider ENUM('GOOGLE', 'NAVER', 'KAKAO') NOT NULL,
     provider_id VARCHAR(255) NOT NULL,
     role ENUM('USER', 'ADMIN') NOT NULL DEFAULT 'USER',
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE refresh_tokens (
@@ -124,7 +124,7 @@ CREATE TABLE refresh_tokens (
     token VARCHAR(500) UNIQUE NOT NULL,
     user_id BIGINT NOT NULL,
     expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 ```
@@ -244,9 +244,9 @@ CREATE TABLE refresh_tokens (
 
 ## 🔮 다음 단계 및 확장 계획
 
-### **1. 데이터베이스 마이그레이션 (우선순위: 높음)**
-- [ ] H2 → MySQL 8.0 마이그레이션
-- [ ] 프로덕션 환경 데이터베이스 설정
+### **1. 데이터베이스 확장 (우선순위: 높음)**
+- [x] MySQL 8.0 연동 완료
+- [ ] 프로덕션 환경 데이터베이스 최적화
 - [ ] 데이터 백업 및 복구 시스템 구축
 
 ### **2. OAuth 제공자 확장 (우선순위: 중간)**
@@ -293,7 +293,7 @@ CREATE TABLE refresh_tokens (
 - **Framework**: Spring Boot 3.5.4
 - **Language**: Java 21
 - **Security**: Spring Security 6.5.2
-- **Database**: H2 (현재) → MySQL 8.0 (예정)
+- **Database**: MySQL 8.0+ (현재)
 - **ORM**: JPA/Hibernate 6.6.22
 - **Build Tool**: Gradle
 - **JWT**: jsonwebtoken 0.12.6
@@ -330,9 +330,9 @@ CREATE TABLE refresh_tokens (
 - 🚀 **유지보수성**: 명확한 아키텍처와 코드 구조
 - 🚀 **보안성**: 현대적인 보안 표준 준수
 
-이제 **H2에서 MySQL로의 마이그레이션**만 남았으며, 이후 프로덕션 환경에서의 실제 서비스 운영이 가능한 상태입니다! 🎉
+이제 프로덕션 환경에서의 실제 서비스 운영이 가능한 상태입니다! 🎉
 
 ---
 
 *프로젝트 완료 날짜: 2025-08-11*  
-*다음 마일스톤: MySQL 마이그레이션 및 프로덕션 배포*
+*현재 상태: MySQL 연동 완료, 프로덕션 준비 완료*

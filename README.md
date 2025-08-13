@@ -43,28 +43,35 @@ SkinMatch 프로젝트의 백엔드 서버입니다.
    ```
 
 4. **접속**
-   - 서버: http://localhost:8080
-   - H2 콘솔: http://localhost:8080/h2-console
+   - 서버: http://localhost:8081
 
 ## 🔐 OAuth 설정
 
 ### Google OAuth 설정
 1. [Google Cloud Console](https://console.cloud.google.com/)에서 프로젝트 생성
 2. OAuth 2.0 클라이언트 ID 생성
-3. 승인된 리디렉션 URI 추가: `http://localhost:8080/login/oauth2/code/google`
+3. 승인된 리디렉션 URI 추가: `http://localhost:8081/login/oauth2/code/google`
 
 ### Naver OAuth 설정
 1. [네이버 개발자 센터](https://developers.naver.com/)에서 애플리케이션 등록
-2. 서비스 URL: `http://localhost:8080`
-3. Callback URL: `http://localhost:8080/login/oauth2/code/naver`
+2. 서비스 URL: `http://localhost:8081`
+3. Callback URL: `http://localhost:8081/login/oauth2/code/naver`
 
 ## 🗃️ 데이터베이스
 
-- **개발환경**: H2 파일 데이터베이스 (`./data/authdb`)
+- **개발환경**: MySQL 8.0+
 - **접속정보**: 
-  - URL: `jdbc:h2:file:./data/authdb`
-  - 사용자명: `sa`
-  - 비밀번호: (없음)
+  - URL: `jdbc:mysql://localhost:3306/skincare_db`
+  - 사용자명: `root`
+  - 비밀번호: `1234`
+  - 데이터베이스: `skincare_db`
+
+### MySQL 설정
+1. MySQL 8.0+ 설치
+2. 데이터베이스 생성:
+   ```sql
+   CREATE DATABASE skincare_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
 
 ## 📡 API 엔드포인트
 
@@ -102,6 +109,6 @@ export JWT_SECRET=your_jwt_secret_key
 - Spring Boot 3.x
 - Spring Security 6.x
 - Spring Data JPA
-- H2 Database
+- MySQL 8.0+
 - JWT Authentication
 - OAuth 2.0

@@ -45,8 +45,5 @@ src/main/resources/application-dev.yml
 .env.*
 
 ### Database ###
-# H2 데이터베이스 파일들
-/data/
+# 데이터베이스 파일들
 *.db
-*.mv.db
-*.trace.db

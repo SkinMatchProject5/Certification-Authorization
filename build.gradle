@@ -43,12 +43,15 @@ dependencies {
     // Development & Database
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'com.mysql:mysql-connector-j'
-    runtimeOnly 'com.h2database:h2'  // H2 Database 추가
 
     // Test
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation('org.springframework.boot:spring-boot-starter-test') {
+        exclude group: 'com.h2database', module: 'h2'
+    }
     testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // MySQL을 테스트에서도 사용
+    testRuntimeOnly 'com.mysql:mysql-connector-j'
 }
 
 tasks.named('test') {

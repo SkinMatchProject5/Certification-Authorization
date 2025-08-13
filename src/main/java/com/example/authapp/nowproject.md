@@ -4,7 +4,7 @@
 
 **목표**: Spring Boot + React 기반 OAuth 2.0 인증 시스템 구현  
 **진행 기간**: 2025-08-08  
-**기술 스택**: Spring Boot 3.5.4, Java 21, React + TypeScript, Gradle, H2 Database  
+**기술 스택**: Spring Boot 3.5.4, Java 21, React + TypeScript, Gradle, MySQL 8.0+  
 **OAuth 제공자**: Google, Naver (Kakao 준비 중)
 
 ---
@@ -16,7 +16,7 @@
 - [x] OAuth 2.0 설정 (Google, Naver)
 - [x] JWT 토큰 기반 인증 시스템
 - [x] RESTful API 설계 및 구현
-- [x] H2 Database 연동
+- [x] MySQL Database 연동
 - [x] Spring Security 설정
 - [x] CORS 설정 완료
 - [x] 글로벌 예외 처리
@@ -83,7 +83,7 @@ auth-app/
 
 ### **데이터베이스 스키마**
 ```sql
--- H2 Database (메모리 DB)
+-- MySQL Database
 CREATE TABLE users (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -92,8 +92,8 @@ CREATE TABLE users (
     provider ENUM('GOOGLE', 'NAVER', 'KAKAO') NOT NULL,
     provider_id VARCHAR(255) NOT NULL,
     role ENUM('USER', 'ADMIN') NOT NULL DEFAULT 'USER',
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE refresh_tokens (
@@ -101,7 +101,7 @@ CREATE TABLE refresh_tokens (
     token VARCHAR(500) UNIQUE NOT NULL,
     user_id BIGINT NOT NULL,
     expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 ```
@@ -129,10 +129,9 @@ GET  /oauth2/authorization/naver   # Naver OAuth 시작
 ```
 
 ### **백엔드 실행 상태**
-- **포트**: 8080
-- **데이터베이스**: H2 (메모리 DB)
-- **H2 Console**: http://localhost:8080/h2-console
-- **Health Check**: http://localhost:8080/actuator/health
+- **포트**: 8081
+- **데이터베이스**: MySQL (skincare_db)
+- **Health Check**: http://localhost:8081/actuator/health
 - **현재 상태**: ⚠️ 서버 실행 필요 확인
 
 ---
