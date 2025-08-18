@@ -1,6 +1,13 @@
 package com.example.authapp.controller;
 
 import com.example.authapp.dto.response.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -13,13 +20,40 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/oauth")
 @RequiredArgsConstructor
+@Tag(name = "OAuth Authentication", description = "소셜 로그인 관련 API")
 public class OAuthController {
 
-    /**
-     * OAuth 로그인 URL 제공
-     */
+    @Operation(
+        summary = "OAuth 로그인 URL 제공",
+        description = "지정된 OAuth 제공자의 로그인 URL을 반환합니다."
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OAuth URL 생성 성공",
+            content = @Content(
+                schema = @Schema(implementation = ApiResponse.class),
+                examples = @ExampleObject(
+                    name = "Google OAuth URL 응답",
+                    value = "{\n" +
+                           "  \"success\": true,\n" +
+                           "  \"message\": \"google OAuth URL\",\n" +
+                           "  \"data\": {\n" +
+                           "    \"provider\": \"google\",\n" +
+                           "    \"loginUrl\": \"http://localhost:8081/oauth2/authorization/google\",\n" +
+                           "    \"url\": \"http://localhost:8081/oauth2/authorization/google\"\n" +
+                           "  }\n" +
+                           "}"
+                )
+            )),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "OAuth URL 생성 실패")
+    })
     @GetMapping("/url/{provider}")
-    public ResponseEntity<ApiResponse<Map<String, String>>> getOAuthUrl(@PathVariable String provider) {
+    public ResponseEntity<ApiResponse<Map<String, String>>> getOAuthUrl(
+        @Parameter(
+            description = "OAuth 제공자", 
+            example = "google",
+            schema = @Schema(allowableValues = {"google", "naver"})
+        )
+        @PathVariable String provider) {
         try {
             String baseUrl = "http://localhost:8081";  // 올바른 포트로 수정
             String loginUrl = baseUrl + "/oauth2/authorization/" + provider.toLowerCase();
@@ -41,9 +75,35 @@ public class OAuthController {
         }
     }
 
-    /**
-     * 지원하는 OAuth 제공자 목록
-     */
+    @Operation(
+        summary = "지원하는 OAuth 제공자 목록",
+        description = "현재 지원하는 모든 OAuth 제공자의 목록과 정보를 반환합니다."
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OAuth 제공자 목록 조회 성공",
+            content = @Content(
+                schema = @Schema(implementation = ApiResponse.class),
+                examples = @ExampleObject(
+                    name = "OAuth 제공자 목록 응답",
+                    value = "{\n" +
+                           "  \"success\": true,\n" +
+                           "  \"message\": \"지원하는 OAuth 제공자 목록\",\n" +
+                           "  \"data\": {\n" +
+                           "    \"google\": {\n" +
+                           "      \"name\": \"Google\",\n" +
+                           "      \"url\": \"/api/oauth/url/google\",\n" +
+                           "      \"available\": \"true\"\n" +
+                           "    },\n" +
+                           "    \"naver\": {\n" +
+                           "      \"name\": \"Naver\",\n" +
+                           "      \"url\": \"/api/oauth/url/naver\",\n" +
+                           "      \"available\": \"true\"\n" +
+                           "    }\n" +
+                           "  }\n" +
+                           "}"
+                )
+            ))
+    })
     @GetMapping("/providers")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getOAuthProviders() {
         Map<String, Object> providers = new HashMap<>();

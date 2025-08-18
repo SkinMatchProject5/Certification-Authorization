@@ -49,6 +49,9 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/h2-console/**").permitAll() // H2 Console 허용
                         
+                        // Swagger UI 허용
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        
                         // API 엔드포인트 - 인증 필요
                         .requestMatchers("/api/**").authenticated()
                         
