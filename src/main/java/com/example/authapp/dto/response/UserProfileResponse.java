@@ -15,6 +15,7 @@ public class UserProfileResponse {
     private String name;
     private String nickname;
     private String profileImage;
+    private String profileImageUrl; // 프론트엔드에서 사용할 수 있는 URL
     private String gender;
     private String birthYear;
     private String nationality;
@@ -35,6 +36,7 @@ public class UserProfileResponse {
                 .name(user.getName())
                 .nickname(user.getNickname())
                 .profileImage(user.getProfileImage())
+                .profileImageUrl(user.getProfileImage()) // 현재는 같은 값, 추후 변환 로직 추가 가능
                 .gender(user.getGender())
                 .birthYear(user.getBirthYear())
                 .nationality(user.getNationality())

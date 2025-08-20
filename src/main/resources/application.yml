@@ -13,6 +13,14 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  # File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 5MB
+      location: ${java.io.tmpdir}
+
   # Web Configuration
   web:
     resources:
@@ -45,16 +53,16 @@ spring:
       client:
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID:your_google_client_id}
-            client-secret: ${GOOGLE_CLIENT_SECRET:your_google_client_secret}
+            client-id: 937808358663-11h9s4rlm81fumno2fd20qlrmlrt6e4i.apps.googleusercontent.com
+            client-secret: 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
             scope:
               - email
               - profile
             redirect-uri: "http://localhost:8081/login/oauth2/code/google"
 
           naver:
-            client-id: ${NAVER_CLIENT_ID:your_naver_client_id}
-            client-secret: ${NAVER_CLIENT_SECRET:your_naver_client_secret}
+            client-id: QCI9gN2PWwDmj8X0RuPt
+            client-secret: GUrRsMZWkB
             authorization-grant-type: authorization_code
             redirect-uri: "http://localhost:8081/login/oauth2/code/naver"
             scope:
@@ -74,6 +82,12 @@ jwt:
   secret: ${JWT_SECRET:defaultSecretKeyForDevelopmentOnly123456789}  # 환경변수 또는 기본값
   expiration: 86400  # 24시간 (초 단위)
   refresh-expiration: 604800  # 7일 (초 단위)
+
+# File Storage Configuration
+app:
+  file:
+    upload-dir: uploads
+    base-url: http://localhost:8081
 
 # CORS Configuration
 cors:
