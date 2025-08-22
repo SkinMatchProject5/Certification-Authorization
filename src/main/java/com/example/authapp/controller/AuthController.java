@@ -97,7 +97,7 @@ public class AuthController {
                 examples = @ExampleObject(
                     name = "로그인 예시",
                     value = "{\n" +
-                           "  \"email\": \"user@example.com\",\n" +
+                           "  \"loginId\": \"user123 또는 user@example.com\",\n" +
                            "  \"password\": \"password123\"\n" +
                            "}"
                 )

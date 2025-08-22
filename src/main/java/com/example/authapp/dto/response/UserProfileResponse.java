@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 public class UserProfileResponse {
     private Long id;
     private String email;
+    private String username;
     private String name;
     private String nickname;
     private String profileImage;
@@ -19,10 +20,14 @@ public class UserProfileResponse {
     private String gender;
     private String birthYear;
     private String nationality;
-    private String allergies;
-    private String surgicalHistory;
     private String provider;
     private String role;
+    private String status; // active, inactive
+    private boolean online; // 현재 접속 상태
+    private LocalDateTime lastLoginAt; // 마지막 로그인 시간
+    private int analysisCount; // 총 분석 횟수
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime lastAnalysisAt; // 마지막 분석 시간
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
     
@@ -33,6 +38,7 @@ public class UserProfileResponse {
         return UserProfileResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
+                .username(user.getUsername())
                 .name(user.getName())
                 .nickname(user.getNickname())
                 .profileImage(user.getProfileImage())
@@ -40,10 +46,13 @@ public class UserProfileResponse {
                 .gender(user.getGender())
                 .birthYear(user.getBirthYear())
                 .nationality(user.getNationality())
-                .allergies(user.getAllergies())
-                .surgicalHistory(user.getSurgicalHistory())
                 .provider(user.getProvider() != null ? user.getProvider().getValue() : "REGULAR")
                 .role(user.getRole().name())
+                .status(user.isActive() ? "active" : "inactive")
+                .online(user.isOnline())
+                .lastLoginAt(user.getLastLoginAt())
+                .analysisCount(user.getAnalysisCount())
+                .lastAnalysisAt(user.getLastAnalysisAt())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

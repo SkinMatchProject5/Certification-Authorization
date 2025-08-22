@@ -12,10 +12,14 @@ import lombok.Setter;
 @Schema(description = "회원가입 요청")
 public class SignupRequest {
     
-    @Schema(description = "사용자명", example = "홍길동", requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotBlank(message = "사용자명을 입력해주세요")
-    @Size(min = 2, max = 20, message = "사용자명은 2-20자 사이여야 합니다")
+    @Schema(description = "사용자 아이디", example = "user123", requiredMode = Schema.RequiredMode.REQUIRED)
+    @NotBlank(message = "아이디를 입력해주세요")
+    @Size(min = 3, max = 20, message = "아이디는 3-20자 사이여야 합니다")
     private String username;
+    
+    @Schema(description = "닉네임 (선택사항)", example = "홍길동")
+    @Size(max = 20, message = "닉네임은 20자 이하여야 합니다")
+    private String nickname;
     
     @Schema(description = "이메일 주소", example = "user@example.com", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "이메일을 입력해주세요")

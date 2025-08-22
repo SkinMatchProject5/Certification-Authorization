@@ -4,6 +4,7 @@ import com.example.authapp.dto.request.UpdateProfileRequest;
 import com.example.authapp.dto.response.ApiResponse;
 import com.example.authapp.dto.response.UserProfileResponse;
 import com.example.authapp.entity.User;
+import com.example.authapp.service.FileUploadService;
 import com.example.authapp.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -18,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @RestController
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final FileUploadService fileUploadService;
 
     @Operation(
         summary = "사용자 프로필 조회",
@@ -43,7 +46,16 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserProfileResponse>> getProfile(
             @Parameter(hidden = true) @AuthenticationPrincipal User user) {
         try {
+            log.info("=== 프로필 조회 ===");
+            log.info("사용자 ID: {}", user.getId());
+            log.info("사용자 이메일: {}", user.getEmail());
+            log.info("사용자 username: {}", user.getUsername());
+            log.info("사용자 닉네임: {}", user.getNickname());
+            log.info("사용자 provider: {}", user.getProvider());
+            
             UserProfileResponse profile = UserProfileResponse.from(user);
+            log.info("응답 닉네임: {}", profile.getNickname());
+            
             return ResponseEntity.ok(ApiResponse.success(profile));
         } catch (Exception e) {
             log.error("Get user profile failed: {}", e.getMessage());
@@ -81,7 +93,7 @@ public class UserController {
 
     @Operation(
         summary = "사용자 프로필 업데이트",
-        description = "사용자의 전체 프로필 정보 업데이트"
+        description = "사용자의 전체 프로필 정보 업데이트 (파일 업로드 지원)"
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "프로필 업데이트 성공",
@@ -89,36 +101,64 @@ public class UserController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "업데이트 실패")
     })
-    @PutMapping("/profile")
+    @PutMapping(value = "/profile", consumes = {"multipart/form-data"})
     public ResponseEntity<ApiResponse<UserProfileResponse>> updateProfile(
             @Parameter(hidden = true) @AuthenticationPrincipal User user,
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                description = "업데이트할 프로필 정보",
-                content = @Content(
-                    schema = @Schema(implementation = UpdateProfileRequest.class),
-                    examples = @ExampleObject(
-                        name = "프로필 업데이트 예시",
-                        value = "{\n" +
-                               "  \"name\": \"홍길동\",\n" +
-                               "  \"nickname\": \"길동이\",\n" +
-                               "  \"profileImage\": \"https://example.com/profile.jpg\",\n" +
-                               "  \"gender\": \"MALE\",\n" +
-                               "  \"birthYear\": \"1990\",\n" +
-                               "  \"nationality\": \"KR\",\n" +
-                               "  \"allergies\": \"땅콩, 갑각류\",\n" +
-                               "  \"surgicalHistory\": \"없음\"\n" +
-                               "}"
-                    )
-                )
-            )
-            @RequestBody UpdateProfileRequest request) {
+            @Parameter(description = "사용자 이름") @RequestParam(required = false) String name,
+            @Parameter(description = "닉네임") @RequestParam(required = false) String nickname,
+            @Parameter(description = "성별") @RequestParam(required = false) String gender,
+            @Parameter(description = "출생년도") @RequestParam(required = false) String birthYear,
+            @Parameter(description = "국적") @RequestParam(required = false) String nationality,
+            @Parameter(description = "프로필 이미지 파일") @RequestParam(required = false) MultipartFile profileImage) {
         try {
+            // UpdateProfileRequest 생성
+            UpdateProfileRequest request = new UpdateProfileRequest();
+            request.setName(name);
+            request.setNickname(nickname);
+            request.setGender(gender);
+            request.setBirthYear(birthYear);
+            request.setNationality(nationality);
+            
+            // 프로필 이미지 업로드 처리
+            if (profileImage != null && !profileImage.isEmpty()) {
+                log.info("=== 프로필 이미지 업로드 시작 ===");
+                log.info("파일명: {}", profileImage.getOriginalFilename());
+                log.info("파일 크기: {} bytes", profileImage.getSize());
+                log.info("컨텐츠 타입: {}", profileImage.getContentType());
+                
+                // 기존 이미지 삭제
+                if (user.getProfileImage() != null) {
+                    log.info("기존 이미지 삭제: {}", user.getProfileImage());
+                    fileUploadService.deleteFile(user.getProfileImage());
+                }
+                
+                try {
+                    // 새 이미지 업로드
+                    String imageUrl = fileUploadService.uploadProfileImage(profileImage);
+                    request.setProfileImage(imageUrl);
+                    
+                    log.info("=== 프로필 이미지 업로드 완료 ===");
+                    log.info("업로드된 이미지 URL: {}", imageUrl);
+                } catch (Exception e) {
+                    log.error("프로필 이미지 업로드 실패: {}", e.getMessage(), e);
+                    throw new RuntimeException("프로필 이미지 업로드에 실패했습니다: " + e.getMessage());
+                }
+            } else {
+                log.info("프로필 이미지 파일이 없음");
+            }
+            
             User updatedUser = userService.updateUserProfile(user.getId(), request);
             
+            log.info("=== 프로필 업데이트 완료 후 확인 ===");
+            log.info("업데이트된 사용자 프로필 이미지: {}", updatedUser.getProfileImage());
+            
             UserProfileResponse profile = UserProfileResponse.from(updatedUser);
+            log.info("응답에 포함될 프로필 이미지: {}", profile.getProfileImage());
+            log.info("응답에 포함될 프로필 이미지 URL: {}", profile.getProfileImageUrl());
+            
             return ResponseEntity.ok(ApiResponse.success("프로필이 업데이트되었습니다.", profile));
         } catch (Exception e) {
-            log.error("Update user profile failed: {}", e.getMessage());
+            log.error("Update user profile failed: {}", e.getMessage(), e);
             return ResponseEntity.badRequest()
                     .body(ApiResponse.failure("프로필 업데이트에 실패했습니다.", e.getMessage()));
         }

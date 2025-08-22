@@ -45,6 +45,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     User user = userService.findByEmail(userEmail).orElse(null);
                     
                     if (user != null && jwtService.isTokenValid(jwt, userEmail)) {
+                        // 디버깅 로그 추가
+                        log.info("=== JWT 필터에서 사용자 인증 ===");
+                        log.info("사용자 이메일: {}", user.getEmail());
+                        log.info("사용자 닉네임: {}", user.getNickname());
+                        log.info("사용자 provider: {}", user.getProvider());
+                        
                         // 인증 객체 생성
                         UsernamePasswordAuthenticationToken authentication = 
                             new UsernamePasswordAuthenticationToken(

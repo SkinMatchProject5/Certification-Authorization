@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -73,19 +74,31 @@ public class AuthService extends DefaultOAuth2UserService {
             throw new RuntimeException("이미 사용중인 이메일입니다.");
         }
 
+        // 아이디 중복 검사
+        if (userService.existsByUsername(request.getUsername())) {
+            throw new RuntimeException("이미 사용중인 아이디입니다.");
+        }
+
         // 비밀번호 암호화
         String encodedPassword = passwordEncoder.encode(request.getPassword());
 
-        // 사용자 생성 (일반 회원가입)
+        // 닉네임이 없으면 아이디를 닉네임으로 사용
+        String nickname = (request.getNickname() != null && !request.getNickname().trim().isEmpty()) 
+                ? request.getNickname().trim() 
+                : request.getUsername();
+
+        // 사용자 생성 (일반 회원가입) - 닉네임 매개변수 추가
         User user = User.createRegularUser(
                 request.getEmail(),
                 request.getUsername(),
+                request.getUsername(), // name으로 username 사용
                 encodedPassword,
-                request.getAddress()
+                request.getAddress(),
+                nickname // 처리된 닉네임 전달
         );
 
         User savedUser = userService.save(user);
-        log.info("Regular user registered successfully: {}", savedUser.getEmail());
+        log.info("Regular user registered successfully: {} (nickname: {})", savedUser.getEmail(), nickname);
 
         return savedUser;
     }
@@ -93,9 +106,17 @@ public class AuthService extends DefaultOAuth2UserService {
     // 일반 로그인
     @Transactional
     public LoginResponse regularLogin(LoginRequest request) {
-        // 사용자 조회
-        User user = userService.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("존재하지 않는 사용자입니다."));
+        log.info("로그인 시도 - loginId: {}", request.getLoginId());
+        
+        // 아이디 또는 이메일로 사용자 조회
+        User user = findUserByLoginId(request.getLoginId())
+                .orElseThrow(() -> {
+                    log.warn("사용자를 찾을 수 없음 - loginId: {}", request.getLoginId());
+                    return new RuntimeException("존재하지 않는 사용자입니다.");
+                });
+
+        log.info("사용자 찾음 - email: {}, username: {}, provider: {}", 
+                user.getEmail(), user.getUsername(), user.getProvider());
 
         // OAuth 사용자인지 확인
         if (user.getProvider() != null) {
@@ -104,16 +125,40 @@ public class AuthService extends DefaultOAuth2UserService {
 
         // 비밀번호 검증
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            log.warn("비밀번호 불일치 - loginId: {}", request.getLoginId());
             throw new RuntimeException("비밀번호가 일치하지 않습니다.");
         }
 
+        log.info("로그인 성공 - user: {}", user.getEmail());
         // JWT 토큰 생성 및 로그인 처리
         return login(user);
+    }
+
+    // 아이디 또는 이메일로 사용자 찾기
+    private Optional<User> findUserByLoginId(String loginId) {
+        log.info("사용자 검색 시작 - loginId: {}", loginId);
+        
+        // 이메일 형식인지 확인
+        if (loginId.contains("@")) {
+            log.info("이메일 형식으로 검색: {}", loginId);
+            Optional<User> user = userService.findByEmail(loginId);
+            log.info("이메일 검색 결과: {}", user.isPresent() ? "찾음" : "못찾음");
+            return user;
+        } else {
+            log.info("아이디 형식으로 검색: {}", loginId);
+            Optional<User> user = userService.findByUsername(loginId);
+            log.info("아이디 검색 결과: {}", user.isPresent() ? "찾음" : "못찾음");
+            return user;
+        }
     }
 
     // 로그인 처리 - JWT 토큰 생성
     @Transactional
     public LoginResponse login(User user) {
+        // 로그인 상태 업데이트
+        user.updateLoginStatus();
+        userService.save(user);
+        
         // Access Token 생성
         String accessToken = jwtService.generateAccessToken(user);
 
@@ -155,8 +200,13 @@ public class AuthService extends DefaultOAuth2UserService {
                 .orElse(null);
 
         if (refreshToken != null) {
+            // 사용자 온라인 상태 업데이트
+            User user = refreshToken.getUser();
+            user.updateLogoutStatus();
+            userService.save(user);
+            
             refreshTokenService.deleteRefreshToken(refreshToken);
-            log.info("User logged out successfully: {}", refreshToken.getUser().getEmail());
+            log.info("User logged out successfully: {}", user.getEmail());
         }
     }
 
@@ -165,6 +215,10 @@ public class AuthService extends DefaultOAuth2UserService {
     public void logout(Long userId) {
         User user = userService.findById(userId)
                 .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+
+        // 사용자 온라인 상태 업데이트
+        user.updateLogoutStatus();
+        userService.save(user);
 
         refreshTokenService.deleteRefreshTokenByUser(user);
         log.info("User logged out successfully: {}", user.getEmail());
@@ -186,5 +240,13 @@ public class AuthService extends DefaultOAuth2UserService {
             log.warn("Token validation failed: {}", e.getMessage());
             return false;
         }
+    }
+
+    // 이메일에서 사용자명 생성 유틸리티 메서드
+    private String generateUsernameFromEmail(String email) {
+        if (email == null || !email.contains("@")) {
+            return "user" + System.currentTimeMillis();
+        }
+        return email.substring(0, email.indexOf("@"));
     }
 }

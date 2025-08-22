@@ -1,69 +1,50 @@
 package com.example.authapp.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
-import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.io.File;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    private static final String DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss";
-    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern(DATETIME_FORMAT);
-
-    @Bean
-    public ObjectMapper objectMapper() {
-        return Jackson2ObjectMapperBuilder.json()
-                .modules(new JavaTimeModule())
-                .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                .serializers(new LocalDateTimeSerializer(DATETIME_FORMATTER))
-                .deserializers(new LocalDateTimeDeserializer(DATETIME_FORMATTER))
-                .build();
-    }
+    @Value("${file.upload-dir:uploads}")
+    private String uploadDir;
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 정적 리소스 핸들러 설정
-        registry.addResourceHandler("/static/**")
-                .addResourceLocations("classpath:/static/");
+        // 업로드 디렉토리의 절대 경로 얻기
+        File uploadDirFile = new File(uploadDir);
+        String absolutePath = uploadDirFile.getAbsolutePath();
         
-        registry.addResourceHandler("/images/**")
-                .addResourceLocations("classpath:/static/images/");
+        System.out.println("=== 정적 파일 서빙 설정 ===");
+        System.out.println("Upload dir: " + uploadDir);
+        System.out.println("Absolute path: " + absolutePath);
+        System.out.println("File URL pattern: /uploads/**");
+        System.out.println("Resource location: file:" + absolutePath + "/");
         
-        registry.addResourceHandler("/css/**")
-                .addResourceLocations("classpath:/static/css/");
-        
-        registry.addResourceHandler("/js/**")
-                .addResourceLocations("classpath:/static/js/");
-
-        // favicon 처리
-        registry.addResourceHandler("/favicon.ico")
-                .addResourceLocations("classpath:/static/favicon.ico");
+        // 업로드된 파일들을 정적 리소스로 서빙
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:" + absolutePath + "/")
+                .setCachePeriod(0)  // 캐싱 비활성화 (개발 중)
+                .resourceChain(true);
     }
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/**")
-                .allowedOriginPatterns("*")
+        // 정적 파일에 대한 CORS 설정
+        registry.addMapping("/uploads/**")
                 .allowedOrigins(
                     "http://localhost:3000",
-                    "http://localhost:5173", 
-                    "http://localhost:8081",
-                    "http://192.168.0.117:8081"
+                    "http://localhost:5173",
+                    "http://localhost:8081"
                 )
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
+                .allowedMethods("GET", "HEAD", "OPTIONS")
                 .allowedHeaders("*")
-                .allowCredentials(true)
+                .allowCredentials(false)  // 정적 파일에는 credentials 불필요
                 .maxAge(3600);
     }
 }

@@ -1,14 +1,15 @@
--- =====================================================
--- Skin Story Solver - User Database Schema (Updated)
--- 현재 JPA Entity 기반으로 업데이트된 사용자 데이터베이스 스키마
--- =====================================================
+-- ========================================
+-- 사용자 관리 시스템 데이터베이스 스키마
+-- 업데이트: 2025-08-20 (분석 통계 및 접속 상태 관리 추가)
+-- ========================================
 
--- 1. 사용자 기본 정보 테이블 (현재 User Entity 기반)
+-- 1. 사용자 기본 정보 테이블 (업데이트)
 CREATE TABLE users (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '사용자 고유 ID',
     
     -- 기본 인증 정보
     email VARCHAR(255) NOT NULL UNIQUE COMMENT '이메일 (로그인 ID)',
+    username VARCHAR(255) UNIQUE COMMENT '사용자명 (표시용 ID)',
     password VARCHAR(255) COMMENT '암호화된 비밀번호 (OAuth 사용자는 NULL 가능)',
     name VARCHAR(255) NOT NULL COMMENT '사용자 이름',
     nickname VARCHAR(255) COMMENT '닉네임',
@@ -18,295 +19,189 @@ CREATE TABLE users (
     
     -- 개인 정보
     gender VARCHAR(50) COMMENT '성별',
-    birth_year VARCHAR(4) COMMENT '출생연도',
+    birth_year VARCHAR(4) COMMENT '출생년도',
     nationality VARCHAR(100) COMMENT '국적',
     address VARCHAR(500) COMMENT '주소',
     
-    -- 의료 정보
-    allergies VARCHAR(1000) COMMENT '알레르기 정보',
-    surgical_history VARCHAR(1000) COMMENT '수술 이력',
+    -- OAuth 관련
+    provider ENUM('GOOGLE', 'NAVER') COMMENT 'OAuth 제공자',
+    provider_id VARCHAR(255) COMMENT '제공자별 고유 ID',
     
-    -- OAuth 정보
-    provider VARCHAR(50) COMMENT 'OAuth 제공자 (GOOGLE, NAVER 등)',
-    provider_id VARCHAR(255) COMMENT 'OAuth 제공자의 사용자 ID',
+    -- 계정 상태
+    role ENUM('USER', 'ADMIN') NOT NULL DEFAULT 'USER' COMMENT '사용자 권한',
+    active BOOLEAN NOT NULL DEFAULT TRUE COMMENT '계정 활성 상태',
     
-    -- 권한
-    role VARCHAR(50) NOT NULL DEFAULT 'USER' COMMENT '사용자 권한',
+    -- 접속 상태 관리
+    last_login_at TIMESTAMP NULL COMMENT '마지막 로그인 시간',
+    is_online BOOLEAN NOT NULL DEFAULT FALSE COMMENT '현재 온라인 상태',
     
-    -- 시스템 필드
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성일시',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
+    -- 분석 관련 정보
+    analysis_count INT NOT NULL DEFAULT 0 COMMENT '총 분석 횟수',
+    last_analysis_at TIMESTAMP NULL COMMENT '마지막 분석 시간',
+    
+    -- 시간 정보
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '계정 생성일',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '정보 수정일',
     
     -- 인덱스
     INDEX idx_email (email),
-    INDEX idx_provider_provider_id (provider, provider_id),
+    INDEX idx_username (username),
+    INDEX idx_provider (provider, provider_id),
+    INDEX idx_active (active),
+    INDEX idx_online (is_online),
+    INDEX idx_last_login (last_login_at),
+    INDEX idx_analysis_count (analysis_count),
+    INDEX idx_last_analysis (last_analysis_at),
     INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='사용자 기본 정보';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='사용자 기본 정보';
 
--- =====================================================
--- 2. Refresh Token 테이블
--- =====================================================
-
-CREATE TABLE refresh_token (
+-- 2. 리프레시 토큰 테이블
+CREATE TABLE refresh_tokens (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL COMMENT '사용자 ID',
-    token VARCHAR(500) NOT NULL UNIQUE COMMENT 'Refresh Token',
-    expiry_date TIMESTAMP NOT NULL COMMENT '만료 일시',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성일시',
+    token VARCHAR(255) NOT NULL UNIQUE COMMENT '리프레시 토큰',
+    expiry_date TIMESTAMP NOT NULL COMMENT '만료일',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_token (token),
     INDEX idx_user_id (user_id),
     INDEX idx_expiry_date (expiry_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Refresh Token 관리';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='리프레시 토큰';
 
--- =====================================================
--- 3. 초기 데이터 삽입 (테스트용)
--- =====================================================
-
--- 기본 관리자 계정 (비밀번호는 암호화 필요)
--- INSERT INTO users (email, password, name, role, created_at, updated_at) 
--- VALUES ('admin@skincarestory.com', '$2a$10$encrypted_password_here', 'Administrator', 'ADMIN', NOW(), NOW());
-
--- =====================================================
--- 4. 추가적인 피부 관련 테이블들 (향후 확장용)
--- =====================================================
-
--- 사용자 피부 프로필 테이블 (향후 추가 예정)
-CREATE TABLE user_skin_profiles (
+-- 3. 파일 업로드 정보 테이블
+CREATE TABLE uploaded_files (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL COMMENT '사용자 ID',
+    user_id BIGINT COMMENT '업로드한 사용자 ID (NULL 가능)',
+    original_filename VARCHAR(255) NOT NULL COMMENT '원본 파일명',
+    stored_filename VARCHAR(255) NOT NULL COMMENT '저장된 파일명',
+    file_path VARCHAR(500) NOT NULL COMMENT '파일 경로',
+    file_size BIGINT NOT NULL COMMENT '파일 크기 (bytes)',
+    content_type VARCHAR(100) COMMENT '파일 MIME 타입',
+    file_type ENUM('PROFILE_IMAGE', 'ANALYSIS_IMAGE', 'GENERAL') NOT NULL DEFAULT 'GENERAL' COMMENT '파일 유형',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- 피부 타입 정보
-    skin_type ENUM('oily', 'dry', 'combination', 'sensitive', 'normal') COMMENT '피부 타입',
-    skin_tone ENUM('very_light', 'light', 'medium_light', 'medium', 'medium_dark', 'dark', 'very_dark') COMMENT '피부톤',
-    skin_undertone ENUM('cool', 'warm', 'neutral') COMMENT '피부 언더톤',
-    
-    -- 피부 고민 및 관심사 (JSON 배열)
-    skin_concerns JSON COMMENT '피부 고민 (여드름, 색소침착, 주름 등)',
-    product_allergies JSON COMMENT '제품 알레르기 정보',
-    
-    -- 현재 사용 제품 정보
-    current_skincare_routine TEXT COMMENT '현재 스킨케어 루틴',
-    preferred_brands JSON COMMENT '선호 브랜드 목록',
-    
-    -- 라이프스타일
-    lifestyle_factors JSON COMMENT '라이프스타일 요인 (수면, 스트레스, 운동 등)',
-    environmental_factors JSON COMMENT '환경 요인 (기후, 대기오염 등)',
-    
-    -- 시스템 필드
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성일시',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
-    
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_user_id (user_id),
-    INDEX idx_skin_type (skin_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='사용자 피부 프로필';
+    INDEX idx_file_type (file_type),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='업로드된 파일 정보';
 
--- 피부 분석 결과 테이블 (향후 추가 예정)
+-- 4. 향후 AI 피부 분석 결과 테이블 (예시)
 CREATE TABLE skin_analysis_results (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL COMMENT '사용자 ID',
+    user_id BIGINT NOT NULL COMMENT '분석을 받은 사용자 ID',
+    analysis_type ENUM('CAMERA', 'SURVEY', 'AI_ANALYSIS') NOT NULL COMMENT '분석 유형',
+    image_file_id BIGINT COMMENT '분석에 사용된 이미지 파일 ID',
     
-    -- 분석 정보
-    analysis_type ENUM('camera', 'survey', 'ai_analysis') NOT NULL COMMENT '분석 유형',
-    analysis_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '분석 일시',
+    -- 분석 결과 (JSON 형태로 저장 가능)
+    result_data JSON COMMENT '분석 결과 데이터',
+    confidence_score DECIMAL(5,4) COMMENT '신뢰도 점수 (0.0000 ~ 1.0000)',
     
-    -- 분석 결과 (JSON 형태로 저장)
-    analysis_results JSON COMMENT '분석 결과 데이터',
-    confidence_score DECIMAL(3,2) COMMENT '신뢰도 점수 (0.00-1.00)',
+    -- 분석 메타데이터
+    analysis_duration_ms INT COMMENT '분석 소요 시간 (밀리초)',
+    model_version VARCHAR(50) COMMENT '사용된 AI 모델 버전',
     
-    -- 추천 정보
-    recommended_products JSON COMMENT '추천 제품 목록',
-    recommended_routine TEXT COMMENT '추천 스킨케어 루틴',
-    
-    -- 이미지 정보 (카메라 분석의 경우)
-    image_url VARCHAR(500) COMMENT '분석에 사용된 이미지 URL',
-    image_metadata JSON COMMENT '이미지 메타데이터',
-    
-    -- 시스템 필드
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성일시',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (image_file_id) REFERENCES uploaded_files(id) ON DELETE SET NULL,
     INDEX idx_user_id (user_id),
-    INDEX idx_analysis_date (analysis_date),
-    INDEX idx_analysis_type (analysis_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='피부 분석 결과';
-
--- 제품 정보 테이블 (향후 추가 예정)
-CREATE TABLE products (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    
-    -- 기본 제품 정보
-    name VARCHAR(255) NOT NULL COMMENT '제품명',
-    brand VARCHAR(100) NOT NULL COMMENT '브랜드',
-    category VARCHAR(100) NOT NULL COMMENT '카테고리',
-    subcategory VARCHAR(100) COMMENT '서브카테고리',
-    
-    -- 제품 상세 정보
-    description TEXT COMMENT '제품 설명',
-    ingredients TEXT COMMENT '성분 정보',
-    usage_instructions TEXT COMMENT '사용법',
-    
-    -- 가격 및 구매 정보
-    price DECIMAL(10,2) COMMENT '가격',
-    currency VARCHAR(3) DEFAULT 'KRW' COMMENT '통화',
-    purchase_url VARCHAR(500) COMMENT '구매 링크',
-    
-    -- 제품 특성
-    skin_types JSON COMMENT '적합한 피부 타입 목록',
-    skin_concerns JSON COMMENT '해결 가능한 피부 고민 목록',
-    
-    -- 평점 및 리뷰
-    average_rating DECIMAL(2,1) DEFAULT 0.0 COMMENT '평균 평점',
-    review_count INT DEFAULT 0 COMMENT '리뷰 수',
-    
-    -- 이미지
-    image_url VARCHAR(500) COMMENT '제품 이미지 URL',
-    
-    -- 상태
-    is_active BOOLEAN DEFAULT TRUE COMMENT '활성 상태',
-    is_recommended BOOLEAN DEFAULT FALSE COMMENT '추천 제품 여부',
-    
-    -- 시스템 필드
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성일시',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
-    
-    INDEX idx_brand (brand),
-    INDEX idx_category (category),
-    INDEX idx_name (name),
-    INDEX idx_is_active (is_active),
-    INDEX idx_average_rating (average_rating)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='제품 정보';
-
--- 사용자 제품 리뷰 테이블 (향후 추가 예정)
-CREATE TABLE user_product_reviews (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL COMMENT '사용자 ID',
-    product_id BIGINT NOT NULL COMMENT '제품 ID',
-    
-    -- 리뷰 내용
-    rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5) COMMENT '평점 (1-5)',
-    title VARCHAR(200) COMMENT '리뷰 제목',
-    content TEXT COMMENT '리뷰 내용',
-    
-    -- 사용 기간 및 효과
-    usage_period VARCHAR(50) COMMENT '사용 기간',
-    effectiveness_rating INT CHECK (effectiveness_rating >= 1 AND effectiveness_rating <= 5) COMMENT '효과 평점',
-    
-    -- 추천 여부
-    would_recommend BOOLEAN COMMENT '다른 사용자에게 추천 여부',
-    
-    -- 상태
-    is_verified BOOLEAN DEFAULT FALSE COMMENT '인증된 구매자 리뷰 여부',
-    is_public BOOLEAN DEFAULT TRUE COMMENT '공개 여부',
-    
-    -- 시스템 필드
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성일시',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
-    
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_user_product_review (user_id, product_id),
-    INDEX idx_product_id (product_id),
-    INDEX idx_rating (rating),
+    INDEX idx_analysis_type (analysis_type),
     INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='사용자 제품 리뷰';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 피부 분석 결과';
 
--- =====================================================
--- 5. 뷰(View) 생성
--- =====================================================
-
--- 사용자 기본 정보 뷰 (민감한 정보 제외)
-CREATE VIEW v_user_public_info AS
+-- 5. 관리자 통계를 위한 뷰 생성
+CREATE VIEW admin_stats_view AS
 SELECT 
-    id,
-    email,
-    name,
-    nickname,
-    profile_image,
-    gender,
-    nationality,
-    provider,
-    role,
-    created_at
-FROM users 
-WHERE role != 'DELETED';
+    -- 총 사용자 수
+    (SELECT COUNT(*) FROM users) as total_users,
+    
+    -- 현재 온라인 사용자 수
+    (SELECT COUNT(*) FROM users WHERE is_online = TRUE) as online_users,
+    
+    -- 최근 5분 이내 활동한 사용자 수
+    (SELECT COUNT(*) FROM users WHERE last_login_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)) as recently_active_users,
+    
+    -- 활성 계정 수 (계정 상태)
+    (SELECT COUNT(*) FROM users WHERE active = TRUE) as active_accounts,
+    
+    -- 비활성 계정 수 (계정 상태)
+    (SELECT COUNT(*) FROM users WHERE active = FALSE) as inactive_accounts,
+    
+    -- 오늘 가입한 사용자 수
+    (SELECT COUNT(*) FROM users WHERE DATE(created_at) = CURDATE()) as new_users_today,
+    
+    -- 이번 주 가입한 사용자 수
+    (SELECT COUNT(*) FROM users WHERE YEARWEEK(created_at) = YEARWEEK(NOW())) as new_users_this_week,
+    
+    -- 총 분석 수 (향후 구현)
+    (SELECT COUNT(*) FROM skin_analysis_results) as total_analyses,
+    
+    -- 오늘 분석 수 (향후 구현)
+    (SELECT COUNT(*) FROM skin_analysis_results WHERE DATE(created_at) = CURDATE()) as analyses_today,
+    
+    -- OAuth 사용자 통계
+    (SELECT COUNT(*) FROM users WHERE provider = 'GOOGLE') as google_users,
+    (SELECT COUNT(*) FROM users WHERE provider = 'NAVER') as naver_users,
+    (SELECT COUNT(*) FROM users WHERE provider IS NULL) as regular_users;
 
--- 사용자 피부 프로필 요약 뷰
-CREATE VIEW v_user_skin_summary AS
-SELECT 
-    u.id as user_id,
-    u.name as user_name,
-    usp.skin_type,
-    usp.skin_tone,
-    usp.skin_undertone,
-    usp.updated_at as profile_updated_at
-FROM users u
-LEFT JOIN user_skin_profiles usp ON u.id = usp.user_id
-WHERE u.role != 'DELETED';
-
--- =====================================================
--- 6. 인덱스 최적화
--- =====================================================
-
--- 복합 인덱스 추가
-ALTER TABLE users ADD INDEX idx_provider_email (provider, email);
-ALTER TABLE users ADD INDEX idx_role_created (role, created_at);
-
--- =====================================================
--- 7. 저장 프로시저 (선택사항)
--- =====================================================
-
+-- 6. 온라인 상태 관리를 위한 프로시저
 DELIMITER //
 
--- 사용자 통계 조회 프로시저
-CREATE PROCEDURE GetUserStatistics()
+-- 사용자 로그인 시 호출
+CREATE PROCEDURE UpdateUserLoginStatus(IN user_id BIGINT)
 BEGIN
-    SELECT 
-        COUNT(*) as total_users,
-        COUNT(CASE WHEN provider IS NULL THEN 1 END) as regular_users,
-        COUNT(CASE WHEN provider = 'GOOGLE' THEN 1 END) as google_users,
-        COUNT(CASE WHEN provider = 'NAVER' THEN 1 END) as naver_users,
-        COUNT(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 END) as new_users_30days
-    FROM users 
-    WHERE role != 'DELETED';
+    UPDATE users 
+    SET 
+        last_login_at = NOW(),
+        is_online = TRUE
+    WHERE id = user_id;
+END //
+
+-- 사용자 로그아웃 시 호출
+CREATE PROCEDURE UpdateUserLogoutStatus(IN user_id BIGINT)
+BEGIN
+    UPDATE users 
+    SET is_online = FALSE
+    WHERE id = user_id;
+END //
+
+-- 분석 완료 시 호출
+CREATE PROCEDURE UpdateUserAnalysisStats(IN user_id BIGINT)
+BEGIN
+    UPDATE users 
+    SET 
+        analysis_count = analysis_count + 1,
+        last_analysis_at = NOW()
+    WHERE id = user_id;
+END //
+
+-- 비활성 사용자 정리 (5분 이상 미활동 시 오프라인으로 설정)
+CREATE PROCEDURE CleanupInactiveUsers()
+BEGIN
+    UPDATE users 
+    SET is_online = FALSE
+    WHERE is_online = TRUE 
+    AND last_login_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE);
 END //
 
 DELIMITER ;
 
--- =====================================================
--- 8. 트리거 (데이터 무결성 보장)
--- =====================================================
+-- 7. 데이터베이스 마이그레이션 스크립트 (기존 테이블이 있는 경우)
+-- ALTER TABLE users 
+-- ADD COLUMN analysis_count INT NOT NULL DEFAULT 0 COMMENT '총 분석 횟수',
+-- ADD COLUMN last_analysis_at TIMESTAMP NULL COMMENT '마지막 분석 시간',
+-- ADD INDEX idx_analysis_count (analysis_count),
+-- ADD INDEX idx_last_analysis (last_analysis_at);
 
-DELIMITER //
+-- 8. 샘플 데이터 삽입 (테스트용)
+INSERT INTO users (email, username, name, role, active, is_online, last_login_at, analysis_count) VALUES
+('admin@skincarestory.com', 'admin', 'System Administrator', 'ADMIN', TRUE, FALSE, NOW(), 0),
+('test@example.com', 'testuser', '테스트 사용자', 'USER', TRUE, TRUE, NOW(), 5),
+('inactive@example.com', 'inactive', '비활성 사용자', 'USER', FALSE, FALSE, DATE_SUB(NOW(), INTERVAL 1 DAY), 2);
 
--- 사용자 삭제 시 관련 데이터 정리 트리거
-CREATE TRIGGER before_user_delete
-    BEFORE UPDATE ON users
-    FOR EACH ROW
-BEGIN
-    IF NEW.role = 'DELETED' AND OLD.role != 'DELETED' THEN
-        SET NEW.email = CONCAT('deleted_', OLD.id, '_', OLD.email);
-        SET NEW.updated_at = NOW();
-    END IF;
-END //
-
-DELIMITER ;
-
--- =====================================================
--- 설치 및 확인 쿼리
--- =====================================================
-
--- 테이블 생성 확인
--- SHOW TABLES;
-
--- 테이블 구조 확인
--- DESCRIBE users;
--- DESCRIBE refresh_token;
--- DESCRIBE user_skin_profiles;
-
--- 제약조건 확인
--- SELECT * FROM information_schema.TABLE_CONSTRAINTS 
--- WHERE TABLE_SCHEMA = 'skincare_db';
+-- 테이블 정보 확인
+SHOW TABLES;
+DESCRIBE users;
+SHOW INDEX FROM users;

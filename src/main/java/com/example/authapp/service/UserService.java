@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -19,6 +21,8 @@ import java.util.Optional;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final EntityManager entityManager;
+    private final FileUploadService fileUploadService;
 
     // 사용자 ID로 조회
     public Optional<User> findById(Long id) {
@@ -28,6 +32,11 @@ public class UserService {
     // 이메일로 사용자 조회
     public Optional<User> findByEmail(String email) {
         return userRepository.findByEmail(email);
+    }
+
+    // 아이디로 사용자 조회
+    public Optional<User> findByUsername(String username) {
+        return userRepository.findByUsername(username);
     }
 
     // 제공자와 제공자 ID로 사용자 조회
@@ -48,7 +57,11 @@ public class UserService {
         if (existingUser.isPresent()) {
             // 기존 사용자 정보 업데이트
             User user = existingUser.get();
-            user.updateBasicProfile(oAuthUserInfo.getName(), oAuthUserInfo.getProfileImage());
+            
+            // 외부 이미지를 로컬로 다운로드
+            String profileImageUrl = downloadExternalProfileImage(oAuthUserInfo.getProfileImage());
+            
+            user.updateBasicProfile(oAuthUserInfo.getName(), profileImageUrl);
             log.info("Updated existing user: {} from provider: {}", email, provider);
             return userRepository.save(user);
         }
@@ -71,19 +84,46 @@ public class UserService {
         return savedUser;
     }
 
+    // 외부 프로필 이미지를 로컬로 다운로드
+    private String downloadExternalProfileImage(String externalImageUrl) {
+        if (externalImageUrl == null || externalImageUrl.trim().isEmpty()) {
+            return null;
+        }
+
+        // 이미 로컬 URL인 경우 그대로 반환
+        if (externalImageUrl.startsWith("http://localhost:808")) {
+            return externalImageUrl;
+        }
+
+        // 외부 이미지인 경우 다운로드 시도
+        log.info("외부 프로필 이미지 다운로드 시도: {}", externalImageUrl);
+        String localImageUrl = fileUploadService.downloadAndSaveImage(externalImageUrl);
+        
+        if (localImageUrl != null) {
+            log.info("외부 이미지 다운로드 성공: {} -> {}", externalImageUrl, localImageUrl);
+            return localImageUrl;
+        } else {
+            log.warn("외부 이미지 다운로드 실패, 원본 URL 사용: {}", externalImageUrl);
+            return externalImageUrl; // 다운로드 실패 시 원본 URL 유지
+        }
+    }
+
     // 제공자별 사용자 생성
     private User createUserByProvider(Provider provider, OAuthUserInfo oAuthUserInfo) {
+        // 외부 이미지를 로컬로 다운로드
+        String profileImageUrl = downloadExternalProfileImage(oAuthUserInfo.getProfileImage());
+        
         return switch (provider) {
             case GOOGLE -> User.createGoogleUser(
                     oAuthUserInfo.getEmail(),
                     oAuthUserInfo.getName(),
-                    oAuthUserInfo.getProfileImage(),
+                    profileImageUrl, // 다운로드된 로컬 URL 사용
                     oAuthUserInfo.getProviderId()
             );
             case NAVER -> User.createNaverUser(
                     oAuthUserInfo.getEmail(),
                     oAuthUserInfo.getName(),
-                    oAuthUserInfo.getProfileImage(),
+                    profileImageUrl, // 다운로드된 로컬 URL 사용
                     oAuthUserInfo.getProviderId()
             );
         };
@@ -105,24 +145,51 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다. ID: " + userId));
 
+        log.info("=== 프로필 업데이트 시작 ===");
+        log.info("사용자 ID: {}", userId);
+        log.info("기존 닉네임: {}", user.getNickname());
+        log.info("요청 닉네임: {}", request.getNickname());
+        log.info("사용자 username: {}", user.getUsername());
+        log.info("사용자 provider: {}", user.getProvider());
+
+        // 닉네임이 비어있으면 username을 사용
+        String finalNickname = (request.getNickname() != null && !request.getNickname().trim().isEmpty()) 
+                ? request.getNickname().trim() 
+                : user.getUsername();
+
+        log.info("최종 닉네임: {}", finalNickname);
+
         user.updateProfile(
                 request.getName(),
-                request.getNickname(),
+                finalNickname, // 처리된 닉네임 사용
                 request.getProfileImage(),
                 request.getGender(),
                 request.getBirthYear(),
-                request.getNationality(),
-                request.getAllergies(),
-                request.getSurgicalHistory()
+                request.getNationality()
         );
         
-        log.info("Updated user profile for user ID: {}", userId);
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        entityManager.flush(); // 명시적으로 flush
+        
+        // 데이터베이스에서 직접 다시 조회
+        User reloadedUser = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("사용자 재조회 실패"));
+        
+        log.info("저장 후 닉네임: {}", savedUser.getNickname());
+        log.info("재조회 후 닉네임: {}", reloadedUser.getNickname());
+        log.info("=== 프로필 업데이트 완료 ===");
+        
+        return reloadedUser; // 재조회된 사용자 반환
     }
 
     // 사용자 존재 여부 확인
     public boolean existsByEmail(String email) {
         return userRepository.existsByEmail(email);
+    }
+
+    // 아이디 존재 여부 확인
+    public boolean existsByUsername(String username) {
+        return userRepository.existsByUsername(username);
     }
 
     public boolean existsByProviderAndProviderId(Provider provider, String providerId) {
@@ -133,5 +200,10 @@ public class UserService {
     @Transactional
     public User save(User user) {
         return userRepository.save(user);
+    }
+
+    // 모든 사용자 조회 (개발용)
+    public List<User> findAll() {
+        return userRepository.findAll();
     }
 }

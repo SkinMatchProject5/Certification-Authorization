@@ -62,13 +62,12 @@ spring:
 
           naver:
             client-id: QCI9gN2PWwDmj8X0RuPt
-            client-secret: GUrRsMZWkB
+            client-secret: 7ygMCYxfM2
             authorization-grant-type: authorization_code
             redirect-uri: "http://localhost:8081/login/oauth2/code/naver"
             scope:
               - name
               - email
-            client-name: Naver
 
         provider:
           naver:
@@ -84,10 +83,11 @@ jwt:
   refresh-expiration: 604800  # 7일 (초 단위)
 
 # File Storage Configuration
+file:
+  upload-dir: uploads
+
 app:
-  file:
-    upload-dir: uploads
-    base-url: http://localhost:8081
+  base-url: http://localhost:8081
 
 # CORS Configuration
 cors:
@@ -107,7 +107,9 @@ server:
 # Logging Configuration
 logging:
   level:
-    com.example.authapp: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.security.oauth2: TRACE
-    org.springframework.web: DEBUG
+    com.example.authapp: INFO
+    org.springframework.security: WARN
+    org.springframework.security.oauth2: WARN
+    org.springframework.web: WARN
+    org.springframework.web.client.RestTemplate: WARN
+    org.springframework.http: WARN

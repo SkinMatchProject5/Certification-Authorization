@@ -4,21 +4,42 @@ import com.example.authapp.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.RequestEntity;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.FormHttpMessageConverter;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.client.endpoint.DefaultAuthorizationCodeTokenResponseClient;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AccessTokenResponseClient;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequest;
+import org.springframework.security.oauth2.client.http.OAuth2ErrorResponseErrorHandler;
+import org.springframework.security.oauth2.core.OAuth2AccessToken;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AccessTokenResponse;
+import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
+import org.springframework.security.oauth2.core.http.converter.OAuth2AccessTokenResponseHttpMessageConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
+@EnableGlobalMethodSecurity(prePostEnabled = true) // 메서드 레벨 보안 활성화
 public class SecurityConfig {
 
     private final AuthService authService;
@@ -49,6 +70,12 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/h2-console/**").permitAll() // H2 Console 허용
                         
+                        // 정적 파일 (업로드된 이미지) 허용
+                        .requestMatchers("/uploads/**").permitAll()
+                        
+                        // 개발용 API 허용 (인증 불필요)
+                        .requestMatchers("/api/dev/**").permitAll()
+                        
                         // Swagger UI 허용
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         
@@ -61,6 +88,7 @@ public class SecurityConfig {
                 
                 // OAuth2 로그인 설정
                 .oauth2Login(oauth2 -> oauth2
+                        .tokenEndpoint(token -> token.accessTokenResponseClient(accessTokenResponseClient()))
                         .userInfoEndpoint(userInfo -> userInfo.userService(authService))
                         .successHandler(oAuth2AuthenticationSuccessHandler)
                         .failureHandler(oAuth2AuthenticationFailureHandler)
@@ -78,6 +106,70 @@ public class SecurityConfig {
                 );
 
         return http.build();
+    }
+
+    @Bean
+    public OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> accessTokenResponseClient() {
+        DefaultAuthorizationCodeTokenResponseClient accessTokenResponseClient = new DefaultAuthorizationCodeTokenResponseClient();
+        
+        OAuth2AccessTokenResponseHttpMessageConverter tokenResponseHttpMessageConverter = new OAuth2AccessTokenResponseHttpMessageConverter();
+        
+        // 네이버 OAuth2 응답을 위한 커스텀 컨버터 설정
+        tokenResponseHttpMessageConverter.setAccessTokenResponseConverter(mapOAuth2AccessTokenResponse -> {
+            // access_token 필드 확인
+            String accessToken = null;
+            if (mapOAuth2AccessTokenResponse.containsKey("access_token")) {
+                accessToken = (String) mapOAuth2AccessTokenResponse.get("access_token");
+            } else if (mapOAuth2AccessTokenResponse.containsKey(OAuth2ParameterNames.ACCESS_TOKEN)) {
+                accessToken = (String) mapOAuth2AccessTokenResponse.get(OAuth2ParameterNames.ACCESS_TOKEN);
+            }
+            
+            if (accessToken == null || accessToken.trim().isEmpty()) {
+                throw new IllegalArgumentException("Access token not found in OAuth2 response");
+            }
+
+            OAuth2AccessTokenResponse.Builder builder = OAuth2AccessTokenResponse.withToken(accessToken)
+                    .tokenType(OAuth2AccessToken.TokenType.BEARER);
+
+            // expires_in 처리
+            if (mapOAuth2AccessTokenResponse.containsKey("expires_in")) {
+                Object expiresInObj = mapOAuth2AccessTokenResponse.get("expires_in");
+                long expiresIn = 0;
+                if (expiresInObj instanceof String) {
+                    expiresIn = Long.parseLong((String) expiresInObj);
+                } else if (expiresInObj instanceof Number) {
+                    expiresIn = ((Number) expiresInObj).longValue();
+                }
+                if (expiresIn > 0) {
+                    builder.expiresIn(expiresIn);
+                }
+            }
+
+            // refresh_token 처리
+            if (mapOAuth2AccessTokenResponse.containsKey("refresh_token")) {
+                String refreshToken = (String) mapOAuth2AccessTokenResponse.get("refresh_token");
+                if (refreshToken != null && !refreshToken.trim().isEmpty()) {
+                    builder.refreshToken(refreshToken);
+                }
+            }
+
+            // scope 처리
+            if (mapOAuth2AccessTokenResponse.containsKey("scope")) {
+                String scope = (String) mapOAuth2AccessTokenResponse.get("scope");
+                if (scope != null && !scope.trim().isEmpty()) {
+                    builder.scopes(StringUtils.commaDelimitedListToSet(scope));
+                }
+            }
+
+            return builder.build();
+        });
+        
+        RestTemplate restTemplate = new RestTemplate(Arrays.asList(
+                new FormHttpMessageConverter(), tokenResponseHttpMessageConverter));
+        restTemplate.setErrorHandler(new OAuth2ErrorResponseErrorHandler());
+        
+        accessTokenResponseClient.setRestOperations(restTemplate);
+        return accessTokenResponseClient;
     }
 
     @Bean

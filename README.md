@@ -7,6 +7,7 @@ SkinMatch 프로젝트의 백엔드 서버입니다.
 ### 필수 요구사항
 - Java 17 이상
 - Gradle 7.0 이상
+- MySQL 8.0+
 
 ### 설치 및 실행
 
@@ -37,13 +38,54 @@ SkinMatch 프로젝트의 백엔드 서버입니다.
      secret: YOUR_JWT_SECRET_KEY_HERE_256_BITS_OR_MORE
    ```
 
-3. **애플리케이션 실행**
+3. **데이터베이스 설정**
+   ```sql
+   CREATE DATABASE skincare_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+
+4. **애플리케이션 실행**
    ```bash
    ./gradlew bootRun
    ```
 
-4. **접속**
+5. **접속**
    - 서버: http://localhost:8081
+   - Swagger UI: http://localhost:8081/swagger-ui/index.html
+
+## 🗃️ 데이터베이스 스키마
+
+### 📊 사용자 테이블 (users)
+
+| 컬럼명 | 타입 | 설명 | 제약조건 |
+|--------|------|------|----------|
+| `id` | BIGINT | 사용자 고유 ID | PK, AUTO_INCREMENT |
+| `email` | VARCHAR(255) | 이메일 (로그인 ID) | NOT NULL, UNIQUE |
+| `username` | VARCHAR(255) | 사용자명 (표시용 ID) | UNIQUE |
+| `password` | VARCHAR(255) | 암호화된 비밀번호 | OAuth 사용자는 NULL |
+| `name` | VARCHAR(255) | 사용자 이름 | NOT NULL |
+| `nickname` | VARCHAR(255) | 닉네임 | |
+| `profile_image` | VARCHAR(255) | 프로필 이미지 URL | |
+| `gender` | VARCHAR(50) | 성별 | |
+| `birth_year` | VARCHAR(4) | 출생년도 | |
+| `nationality` | VARCHAR(100) | 국적 | |
+| `allergies` | TEXT | 알레르기 정보 | |
+| `surgical_history` | TEXT | 수술 이력 | |
+| `address` | VARCHAR(500) | 주소 | |
+| `provider` | ENUM('GOOGLE', 'NAVER') | OAuth 제공자 | |
+| `provider_id` | VARCHAR(255) | 제공자별 고유 ID | |
+| `role` | ENUM('USER', 'ADMIN') | 사용자 권한 | NOT NULL, DEFAULT 'USER' |
+| `active` | BOOLEAN | 계정 활성 상태 | NOT NULL, DEFAULT TRUE |
+| **`last_login_at`** | **TIMESTAMP** | **마지막 로그인 시간** | **NEW** |
+| **`is_online`** | **BOOLEAN** | **현재 온라인 상태** | **NOT NULL, DEFAULT FALSE** |
+| **`analysis_count`** | **INT** | **총 분석 횟수** | **NOT NULL, DEFAULT 0** |
+| **`last_analysis_at`** | **TIMESTAMP** | **마지막 분석 시간** | **NEW** |
+| `created_at` | TIMESTAMP | 계정 생성일 | DEFAULT CURRENT_TIMESTAMP |
+| `updated_at` | TIMESTAMP | 정보 수정일 | ON UPDATE CURRENT_TIMESTAMP |
+
+### 🔄 기타 테이블
+- `refresh_tokens`: JWT 리프레시 토큰 관리
+- `uploaded_files`: 파일 업로드 정보
+- `skin_analysis_results`: AI 피부 분석 결과 (향후 구현)
 
 ## 🔐 OAuth 설정
 
@@ -57,612 +99,70 @@ SkinMatch 프로젝트의 백엔드 서버입니다.
 2. 서비스 URL: `http://localhost:8081`
 3. Callback URL: `http://localhost:8081/login/oauth2/code/naver`
 
-## 🗃️ 데이터베이스
-
-- **개발환경**: MySQL 8.0+
-- **접속정보**: 
-  - URL: `jdbc:mysql://localhost:3306/skincare_db`
-  - 사용자명: `root`
-  - 비밀번호: `1234`
-  - 데이터베이스: `skincare_db`
-
-### MySQL 설정
-1. MySQL 8.0+ 설치
-2. 데이터베이스 생성:
-   ```sql
-   CREATE DATABASE skincare_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   ```
-
 ## 📡 API 엔드포인트
 
-### 인증
-- `POST /api/auth/login` - 로그인
+### 🔑 Authentication (인증 관련)
 - `POST /api/auth/signup` - 회원가입
+- `POST /api/auth/login` - 로그인
 - `GET /api/auth/me` - 현재 사용자 정보
 - `POST /api/auth/refresh` - 토큰 갱신
 - `POST /api/auth/logout` - 로그아웃
 
-### OAuth
+### 🔗 OAuth (소셜 로그인)
+- `GET /api/oauth/providers` - 지원 OAuth 제공자 목록
+- `GET /api/oauth/url/{provider}` - OAuth 로그인 URL 조회
 - `GET /oauth2/authorization/google` - Google 로그인
 - `GET /oauth2/authorization/naver` - Naver 로그인
 
-# 🎯 Skin Story Solver API 상세 명세서
-
-## 📋 프로젝트 정보
-
-| 항목 | 내용 |
-|------|------|
-| **프로젝트명** | Skin Story Solver |
-| **서비스 설명** | AI 기반 피부 분석 및 병원 추천 플랫폼 |
-| **API 버전** | v1.0.0 |
-| **서버 포트** | 8081 |
-| **베이스 URL** | `http://localhost:8081` |
-| **문서 버전** | 2025-08-18 |
-| **Swagger UI** | `http://localhost:8081/swagger-ui/index.html` |
-
----
-
-## 🏗️ 시스템 아키텍처
-
-```
-📱 Frontend (React)     🔐 Auth Service        📷 Camera Service
-   Port: 5173      ←→     Port: 8081      ←→      Port: 8000
-                              ↓
-                         🗄️ MySQL DB
-                           Port: 3306
-```
-
----
-
-## 🔐 인증 시스템
-
-### JWT 토큰 기반 인증
-- **Access Token**: 24시간 유효
-- **Refresh Token**: 7일 유효
-- **헤더 형식**: `Authorization: Bearer {access_token}`
-
-### 지원하는 로그인 방식
-1. **일반 로그인**: 이메일 + 비밀번호
-2. **소셜 로그인**: Google OAuth, Naver OAuth
-
----
-
-## 📊 API 엔드포인트 목록
-
-### 🔑 Authentication (인증 관련)
-
-| Method | Endpoint | 설명 | 인증 필요 |
-|--------|----------|------|-----------|
-| POST | `/api/auth/signup` | 회원가입 | ❌ |
-| POST | `/api/auth/login` | 로그인 | ❌ |
-| POST | `/api/auth/refresh` | 토큰 재발급 | ❌ |
-| POST | `/api/auth/logout` | 로그아웃 | ❌ |
-| GET | `/api/auth/me` | 현재 사용자 정보 조회 | ✅ |
-| POST | `/api/auth/validate` | 토큰 유효성 검증 | ✅ |
-| GET | `/api/auth/oauth/{provider}` | OAuth 로그인 URL 조회 | ❌ |
-
-### 🔗 OAuth (소셜 로그인)
-
-| Method | Endpoint | 설명 | 인증 필요 |
-|--------|----------|------|-----------|
-| GET | `/api/oauth/providers` | 지원 OAuth 제공자 목록 | ❌ |
-| GET | `/api/oauth/url/{provider}` | OAuth 로그인 URL 조회 | ❌ |
-
 ### 👤 User Management (사용자 관리)
+- `GET /api/users/profile` - 프로필 조회
+- `PUT /api/users/profile` - 프로필 전체 업데이트
+- `PUT /api/users/profile/basic` - 기본 정보 업데이트
 
-| Method | Endpoint | 설명 | 인증 필요 |
-|--------|----------|------|-----------|
-| GET | `/api/users/profile` | 프로필 조회 | ✅ |
-| GET | `/api/users/{userId}` | 특정 사용자 조회 (관리자) | ✅ |
-| PUT | `/api/users/profile` | 프로필 전체 업데이트 | ✅ |
-| PUT | `/api/users/profile/basic` | 기본 정보 업데이트 | ✅ |
+### 🛠️ Admin Management (관리자 기능) ⭐ NEW
+- `GET /api/admin/stats` - 관리자 통계 정보 조회
+- `GET /api/admin/users` - 사용자 목록 조회 (검색, 필터링, 페이징)
+- `POST /api/admin/users/{userId}/toggle-status` - 사용자 상태 토글
+- `DELETE /api/admin/users/{userId}` - 사용자 삭제
+- `POST /api/admin/users/{userId}/profile-image` - 프로필 이미지 변경
 
----
+### 🔧 Development (개발용 API) ⭐ NEW
+- `GET /api/dev/users` - 모든 사용자 조회
+- `POST /api/dev/create-admin` - 관리자 계정 생성/승격
+- `POST /api/dev/create-default-admin` - 기본 관리자 계정 생성
+- `POST /api/dev/fix-online-status` - 사용자 데이터 수정
 
-## 📝 상세 API 명세
+## 📊 새로운 관리자 기능
 
-### 🔑 Authentication APIs
-
-#### 1. 회원가입
-```http
-POST /api/auth/signup
-Content-Type: application/json
-```
-
-**요청 Body:**
+### 실시간 사용자 통계
 ```json
 {
-  "username": "홍길동",
-  "email": "hongildong@example.com",
-  "password": "password123!",
-  "confirmPassword": "password123!",
-  "address": "서울특별시 강남구 테헤란로 123"
+  "totalUsers": 150,
+  "onlineUsers": 25,          // 현재 접속 중인 사용자
+  "recentlyActiveUsers": 45,  // 최근 5분 이내 활동
+  "newUsersToday": 5,
+  "totalAnalyses": 1250,      // 총 분석 수 (향후 AI 연동)
+  "analysesToday": 35
 }
 ```
 
-**응답:**
-```json
-{
-  "success": true,
-  "message": "회원가입이 완료되었습니다.",
-  "data": {
-    "id": 1,
-    "email": "hongildong@example.com",
-    "name": "홍길동",
-    "role": "USER",
-    "provider": "LOCAL",
-    "createdAt": "2025-08-18T10:30:00Z"
-  }
-}
-```
-
-**유효성 검사:**
-- `username`: 2-20자, 필수
-- `email`: 유효한 이메일 형식, 필수
-- `password`: 6-50자, 필수
-- `confirmPassword`: password와 일치, 필수
-- `address`: 선택사항
-
-**에러 응답:**
-```json
-{
-  "success": false,
-  "message": "회원가입에 실패했습니다.",
-  "error": "이미 존재하는 이메일입니다."
-}
-```
-
----
-
-#### 2. 로그인
-```http
-POST /api/auth/login
-Content-Type: application/json
-```
-
-**요청 Body:**
-```json
-{
-  "email": "hongildong@example.com",
-  "password": "password123!"
-}
-```
-
-**응답:**
-```json
-{
-  "success": true,
-  "message": "로그인이 완료되었습니다.",
-  "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "tokenType": "Bearer",
-    "expiresIn": 86400,
-    "user": {
-      "id": 1,
-      "email": "hongildong@example.com",
-      "name": "홍길동",
-      "role": "USER",
-      "provider": "LOCAL"
-    }
-  }
-}
-```
-
----
-
-#### 3. 토큰 재발급
-```http
-POST /api/auth/refresh
-Content-Type: application/json
-```
-
-**요청 Body:**
-```json
-{
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-**응답:**
-```json
-{
-  "success": true,
-  "message": "토큰이 재발급되었습니다.",
-  "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "tokenType": "Bearer",
-    "expiresIn": 86400
-  }
-}
-```
-
----
-
-#### 4. 로그아웃
-```http
-POST /api/auth/logout
-Content-Type: application/json
-```
-
-**요청 Body:**
-```json
-{
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-**응답:**
-```json
-{
-  "success": true,
-  "message": "로그아웃되었습니다."
-}
-```
-
----
-
-#### 5. 현재 사용자 정보 조회
-```http
-GET /api/auth/me
-Authorization: Bearer {accessToken}
-```
-
-**응답:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "email": "hongildong@example.com",
-    "name": "홍길동",
-    "nickname": "길동이",
-    "profileImage": "https://example.com/profile/1.jpg",
-    "role": "USER",
-    "provider": "LOCAL",
-    "gender": "MALE",
-    "birthYear": "1990",
-    "nationality": "KR",
-    "allergies": "땅콩, 갑각류",
-    "surgicalHistory": "없음",
-    "createdAt": "2025-08-18T10:30:00Z",
-    "updatedAt": "2025-08-18T10:30:00Z"
-  }
-}
-```
-
----
-
-#### 6. 토큰 유효성 검증
-```http
-POST /api/auth/validate
-Authorization: Bearer {accessToken}
-```
-
-**응답:**
-```json
-{
-  "success": true,
-  "message": "토큰 검증 완료",
-  "data": true
-}
-```
-
----
-
-### 🔗 OAuth APIs
-
-#### 1. OAuth 제공자 목록 조회
-```http
-GET /api/oauth/providers
-```
-
-**응답:**
-```json
-{
-  "success": true,
-  "message": "지원하는 OAuth 제공자 목록",
-  "data": {
-    "google": {
-      "name": "Google",
-      "url": "/api/oauth/url/google",
-      "available": "true"
-    },
-    "naver": {
-      "name": "Naver",
-      "url": "/api/oauth/url/naver",
-      "available": "true"
-    }
-  }
-}
-```
-
----
-
-#### 2. OAuth 로그인 URL 조회
-```http
-GET /api/oauth/url/{provider}
-```
-
-**Path Parameters:**
-- `provider`: `google` | `naver`
-
-**응답:**
-```json
-{
-  "success": true,
-  "message": "google OAuth URL",
-  "data": {
-    "provider": "google",
-    "loginUrl": "http://localhost:8081/oauth2/authorization/google",
-    "url": "http://localhost:8081/oauth2/authorization/google"
-  }
-}
-```
-
-**OAuth 로그인 플로우:**
-1. 클라이언트가 이 URL로 사용자를 리다이렉트
-2. 사용자가 OAuth 제공자에서 로그인
-3. 제공자가 콜백 URL로 인증 코드 전송
-4. 서버가 토큰 발급 후 프론트엔드로 리다이렉트
-
----
-
-### 👤 User Management APIs
-
-#### 1. 프로필 조회
-```http
-GET /api/users/profile
-Authorization: Bearer {accessToken}
-```
-
-**응답:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "email": "hongildong@example.com",
-    "name": "홍길동",
-    "nickname": "길동이",
-    "profileImage": "https://example.com/profile/1.jpg",
-    "role": "USER",
-    "provider": "LOCAL",
-    "gender": "MALE",
-    "birthYear": "1990",
-    "nationality": "KR",
-    "allergies": "땅콩, 갑각류",
-    "surgicalHistory": "없음",
-    "createdAt": "2025-08-18T10:30:00Z",
-    "updatedAt": "2025-08-18T10:30:00Z"
-  }
-}
-```
-
----
-
-#### 2. 특정 사용자 조회 (관리자용)
-```http
-GET /api/users/{userId}
-Authorization: Bearer {accessToken}
-```
-
-**Path Parameters:**
-- `userId`: 사용자 ID (숫자)
-
-**권한**: ADMIN 역할만 접근 가능
-
-**응답:** 위와 동일
-
----
-
-#### 3. 프로필 전체 업데이트
-```http
-PUT /api/users/profile
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-```
-
-**요청 Body:**
-```json
-{
-  "name": "홍길동",
-  "nickname": "새길동",
-  "profileImage": "https://example.com/new-profile.jpg",
-  "gender": "MALE",
-  "birthYear": "1990",
-  "nationality": "KR",
-  "allergies": "새우, 땅콩",
-  "surgicalHistory": "2023년 피부 레이저 시술"
-}
-```
-
-**응답:**
-```json
-{
-  "success": true,
-  "message": "프로필이 업데이트되었습니다.",
-  "data": {
-    // 업데이트된 사용자 정보
-  }
-}
-```
-
----
-
-#### 4. 기본 정보 업데이트
-```http
-PUT /api/users/profile/basic?name=새이름&profileImage=https://new-image.jpg
-Authorization: Bearer {accessToken}
-```
-
-**Query Parameters:**
-- `name`: 사용자 이름 (선택)
-- `profileImage`: 프로필 이미지 URL (선택)
-
----
-
-## 📊 공통 응답 형식
-
-### ✅ 성공 응답
-```json
-{
-  "success": true,
-  "message": "성공 메시지",
-  "data": {
-    // 응답 데이터
-  }
-}
-```
-
-### ❌ 실패 응답
-```json
-{
-  "success": false,
-  "message": "에러 개요",
-  "error": "상세 에러 메시지"
-}
-```
-
----
-
-## 🚦 HTTP 상태 코드
-
-| 코드 | 의미 | 사용 상황 |
-|------|------|-----------|
-| **200** | OK | 요청 성공 |
-| **201** | Created | 리소스 생성 성공 |
-| **400** | Bad Request | 잘못된 요청 (유효성 검사 실패) |
-| **401** | Unauthorized | 인증 실패 (토큰 없음/만료) |
-| **403** | Forbidden | 권한 없음 |
-| **404** | Not Found | 리소스를 찾을 수 없음 |
-| **409** | Conflict | 리소스 중복 (이미 존재하는 이메일) |
-| **500** | Internal Server Error | 서버 내부 오류 |
-
----
-
-## 🔧 개발 환경 설정
-
-### Backend 기술 스택
-```yaml
-Java: 21
-Spring Boot: 3.3.5
-SpringDoc OpenAPI: 2.5.0
-JWT Library: io.jsonwebtoken:jjwt-api:0.12.6
-Database: MySQL 8.0
-Port: 8081
-```
-
-### 환경 변수
-```yaml
-# application.yml
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/skincare_db
-    username: root
-    password: 1234
-  
-  security:
-    oauth2:
-      client:
-        registration:
-          google:
-            client-id: ${GOOGLE_CLIENT_ID}
-            client-secret: ${GOOGLE_CLIENT_SECRET}
-          naver:
-            client-id: ${NAVER_CLIENT_ID}
-            client-secret: ${NAVER_CLIENT_SECRET}
-
-jwt:
-  secret: ${JWT_SECRET}
-  expiration: 86400  # 24시간
-  refresh-expiration: 604800  # 7일
-```
-
----
-
-## 🧪 테스트 가이드
-
-### Postman 컬렉션 사용법
-
-1. **회원가입 테스트**
-   ```bash
-   POST http://localhost:8081/api/auth/signup
-   # Body에 회원가입 정보 입력
-   ```
-
-2. **로그인 후 토큰 저장**
-   ```bash
-   POST http://localhost:8081/api/auth/login
-   # 응답에서 accessToken을 환경변수로 저장
-   ```
-
-3. **인증이 필요한 API 테스트**
-   ```bash
-   GET http://localhost:8081/api/auth/me
-   Authorization: Bearer {{accessToken}}
-   ```
-
-### 테스트 시나리오
-
-#### 🔄 일반 로그인 플로우
-1. 회원가입 → 2. 로그인 → 3. 프로필 조회 → 4. 프로필 수정 → 5. 로그아웃
-
-#### 🔗 OAuth 로그인 플로우
-1. OAuth URL 조회 → 2. 브라우저에서 OAuth 로그인 → 3. 콜백 처리 → 4. 토큰 발급
-
-#### 🔄 토큰 갱신 플로우
-1. 로그인 → 2. 토큰 만료 대기 → 3. 토큰 재발급 → 4. 새 토큰으로 API 호출
-
----
-
-## 🚨 주의사항 및 제한사항
-
-### 보안
-- 🔒 모든 비밀번호는 BCrypt로 암호화 저장
-- 🔒 JWT Secret Key는 256비트 이상 권장
-- 🔒 HTTPS 환경에서만 운영 (프로덕션)
-- 🔒 CORS 설정으로 허용된 도메인만 접근 가능
-
-### 제한사항
-- 📊 이메일 중복 불가
-- 📊 사용자명 2-20자 제한
-- 📊 비밀번호 6-50자 제한
-- 📊 토큰 만료시간: Access Token 24시간, Refresh Token 7일
-
-### 에러 처리
-- 🔍 모든 API 응답은 동일한 형식 사용
-- 🔍 에러 발생 시 로그에 상세 정보 기록
-- 🔍 클라이언트에는 보안상 민감한 정보 제외하고 응답
-
----
-
-## 📝 업데이트 이력
-
-| 버전 | 날짜 | 담당자 | 변경사항 |
-|------|------|--------|----------|
-| v1.0.0 | 2025-08-18 | Backend Team | 초기 API 명세서 작성 |
-
----
-
-## 🔗 관련 링크
-
-- **Swagger UI**: http://localhost:8081/swagger-ui/index.html
-- **OpenAPI JSON**: http://localhost:8081/v3/api-docs
-- **Health Check**: http://localhost:8081/actuator/health
-- **GitHub Repository**: [프로젝트 저장소 링크]
-
----
+### 사용자 관리 기능
+- **검색 및 필터링**: 이름, 이메일, 상태별 검색
+- **실시간 접속 상태**: 온라인/오프라인 표시
+- **분석 통계**: 사용자별 분석 횟수 및 마지막 분석일
+- **계정 관리**: 활성화/비활성화, 삭제, 프로필 이미지 변경
 
 ## 🛡️ 보안 설정
 
-- JWT 기반 인증
+- JWT 기반 인증 시스템
 - CORS 설정으로 프론트엔드 연동 지원
 - OAuth 2.0 소셜 로그인 지원 (Google, Naver)
+- 관리자 권한 기반 접근 제어
+- 개발환경 전용 API 분리 (`@Profile("!prod")`)
 
 ## 📝 환경변수
 
+### 개발환경
 프로덕션 환경에서는 다음 환경변수를 설정하세요:
 
 ```bash
@@ -671,13 +171,49 @@ export GOOGLE_CLIENT_SECRET=your_google_client_secret
 export NAVER_CLIENT_ID=your_naver_client_id
 export NAVER_CLIENT_SECRET=your_naver_client_secret
 export JWT_SECRET=your_jwt_secret_key
+export SPRING_PROFILES_ACTIVE=prod
+```
+
+## 🚀 Quick Start for Admin
+
+### 1. 관리자 계정 생성
+```bash
+POST http://localhost:8081/api/dev/create-default-admin
+```
+- 이메일: `admin@skincarestory.com`
+- 비밀번호: `admin123`
+
+### 2. 관리자 로그인
+```bash
+POST http://localhost:8081/api/auth/login
+{
+  "email": "admin@skincarestory.com",
+  "password": "admin123"
+}
+```
+
+### 3. 관리자 통계 확인
+```bash
+GET http://localhost:8081/api/admin/stats
+Authorization: Bearer {access_token}
 ```
 
 ## 🔧 개발자 정보
 
-- Spring Boot 3.x
-- Spring Security 6.x
-- Spring Data JPA
-- MySQL 8.0+
-- JWT Authentication
-- OAuth 2.0
+### 기술 스택
+- **Framework**: Spring Boot 3.3.5
+- **Security**: Spring Security 6.3.4 + JWT
+- **Database**: MySQL 8.0+ with Spring Data JPA
+- **Authentication**: JWT + OAuth 2.0
+- **Documentation**: SpringDoc OpenAPI 3
+- **Build Tool**: Gradle 8.x
+
+### 주요 업데이트 (v1.0.1)
+- ✅ 사용자 온라인 상태 실시간 추적
+- ✅ 피부 분석 횟수 및 마지막 분석일 기록
+- ✅ 관리자 대시보드 통계 API
+- ✅ 사용자 검색, 필터링, 페이징 기능
+- ✅ 계정 상태 관리 (활성화/비활성화)
+- ✅ 개발용 API 도구 제공
+
+|

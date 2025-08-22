@@ -131,4 +131,79 @@ public class FileStorageService {
             log.warn("기존 프로필 이미지 삭제 실패: {}", imageUrl, ex);
         }
     }
+
+    /**
+     * 일반 파일 저장 (관리자용)
+     */
+    public String storeFile(MultipartFile file) {
+        // 파일 유효성 검사
+        validateProfileImage(file);
+        
+        // 파일명 생성
+        String fileName = generateUniqueFileName(file);
+        
+        try {
+            // 파일명 유효성 검사
+            if (fileName.contains("..")) {
+                throw new RuntimeException("파일명에 잘못된 경로가 포함되어 있습니다: " + fileName);
+            }
+
+            // 일반 파일 디렉토리 생성
+            Path generalDir = this.fileStorageLocation.resolve("general");
+            Files.createDirectories(generalDir);
+
+            // 파일 저장
+            Path targetLocation = generalDir.resolve(fileName);
+            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+
+            log.info("파일 저장 완료: {}", targetLocation);
+
+            // 접근 가능한 URL 반환
+            return String.format("%s/api/files/general/%s", baseUrl, fileName);
+
+        } catch (IOException ex) {
+            throw new RuntimeException("파일 저장에 실패했습니다: " + fileName, ex);
+        }
+    }
+
+    /**
+     * 일반 파일 삭제 (관리자용)
+     */
+    public void deleteFile(String fileUrl) {
+        try {
+            if (fileUrl != null && fileUrl.startsWith(baseUrl)) {
+                String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
+                
+                // profiles 또는 general 디렉토리에서 파일 찾기
+                Path profilePath = this.fileStorageLocation.resolve("profiles").resolve(fileName);
+                Path generalPath = this.fileStorageLocation.resolve("general").resolve(fileName);
+                
+                boolean deleted = Files.deleteIfExists(profilePath) || Files.deleteIfExists(generalPath);
+                
+                if (deleted) {
+                    log.info("파일 삭제 완료: {}", fileName);
+                } else {
+                    log.warn("삭제할 파일을 찾을 수 없습니다: {}", fileName);
+                }
+            }
+        } catch (IOException ex) {
+            log.warn("파일 삭제 실패: {}", fileUrl, ex);
+            throw new RuntimeException("파일 삭제에 실패했습니다: " + fileUrl, ex);
+        }
+    }
+
+    /**
+     * 고유 파일명 생성
+     */
+    private String generateUniqueFileName(MultipartFile file) {
+        String originalFileName = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()));
+        String fileExtension = "";
+        
+        if (originalFileName.contains(".")) {
+            fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
+        }
+        
+        // 고유한 파일명 생성: {UUID}.{extension}
+        return UUID.randomUUID().toString() + fileExtension;
+    }
 }
